@@ -1,0 +1,95 @@
+# -*- coding: utf-8 -*-
+"""
+Bank Fraud Simulator - Python Version
+
+Processes a list of transactions and flags those exceeding a defined threshold
+as potentially fraudulent. Demonstrates basic list processing and conditional logic.
+"""
+
+import time # Used for basic performance timing example
+
+# Represents a transaction using a dictionary for simplicity.
+# In a larger system, a class or namedtuple might be preferred.
+def create_transaction(tx_id, account_id, amount, timestamp):
+    """Helper to create transaction dictionaries consistently."""
+    return {
+        "id": tx_id,
+        "account_id": account_id,
+        "amount": amount, # Positive for deposit, negative for withdrawal (or just magnitude)
+        "timestamp": timestamp
+    }
+
+def detect_large_transactions(transactions, threshold):
+    """
+    Identifies transactions exceeding a specified amount threshold.
+
+    Args:
+        transactions (list): A list of transaction dictionaries.
+                             Each dict expects at least an 'amount' key.
+        threshold (float or int): The amount above which a transaction is flagged.
+                                  Assumes threshold is a positive value.
+
+    Returns:
+        list: A list of transaction dictionaries that exceed the threshold.
+              Returns an empty list if no transactions exceed the threshold or
+              if the input list is empty.
+    """
+    # Ensure threshold is positive for clarity of 'exceeding'
+    if threshold <= 0:
+         print("Warning: Threshold should generally be positive for detecting large transactions.")
+         # Depending on requirements, could raise error or proceed
+
+    flagged_transactions = [] # Use a list to store the results
+
+    # Basic iteration through the list of transactions.
+    # This is a fundamental data structure traversal.
+    for tx in transactions:
+        # Check if the 'amount' exists and if its absolute value exceeds the threshold.
+        # Using abs() flags large deposits *and* large withdrawals/payments.
+        # Adjust logic if only large withdrawals are considered fraud.
+        if 'amount' in tx and abs(tx['amount']) > threshold:
+            flagged_transactions.append(tx) # Add the suspicious transaction to our results
+
+    return flagged_transactions
+
+# --- Main Execution Area ---
+if __name__ == "__main__":
+    # Sample transaction log (list of dictionaries)
+    # In a real scenario, this would be loaded from a file or database.
+    transaction_log = [
+        create_transaction(1, "ACC001", 50.25, "2024-01-15T10:00:00Z"),
+        create_transaction(2, "ACC002", 15000.00, "2024-01-15T10:05:00Z"), # Potential outlier
+        create_transaction(3, "ACC001", -20.00, "2024-01-15T10:10:00Z"),
+        create_transaction(4, "ACC003", 100.00, "2024-01-15T10:15:00Z"),
+        create_transaction(5, "ACC002", -12000.50, "2024-01-15T11:00:00Z"), # Potential outlier
+        create_transaction(6, "ACC004", 75.99, "2024-01-15T11:05:00Z"),
+        create_transaction(7, "ACC001", 250000.00, "2024-01-15T11:30:00Z"), # Potential outlier (large deposit)
+    ]
+
+    # Define the threshold for flagging transactions
+    fraud_threshold = 10000.00
+
+    print(f"--- Python Bank Fraud Simulator ---")
+    print(f"Processing {len(transaction_log)} transactions...")
+    print(f"Flagging transactions with absolute amount > {fraud_threshold:.2f}")
+
+    # --- Basic Timing ---
+    start_time = time.time()
+
+    # Execute the detection logic
+    suspicious_transactions = detect_large_transactions(transaction_log, fraud_threshold)
+
+    end_time = time.time()
+    duration = end_time - start_time
+    # --- End Timing ---
+
+
+    print(f"\n--- Potential Fraudulent Transactions Found ({len(suspicious_transactions)}) ---")
+    if suspicious_transactions:
+        for tx in suspicious_transactions:
+            # Simple formatted output
+            print(f"  ID: {tx['id']}, Account: {tx['account_id']}, Amount: {tx['amount']:.2f}, Time: {tx['timestamp']}")
+    else:
+        print("  No transactions exceeded the threshold.")
+
+    print(f"\nProcessing completed in {duration:.6f} seconds (Python).")
