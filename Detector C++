@@ -1,0 +1,106 @@
+#include <iostream> // For console input/output (std::cout)
+#include <vector>   // For dynamic arrays (std::vector)
+#include <string>   // For using std::string
+#include <cmath>    // For std::abs
+#include <chrono>   // For timing execution
+
+/**
+ * @file fraud_detector.cpp
+ * @brief Bank Fraud Simulator - C++ Version
+ *
+ * Processes a vector of transactions and flags those exceeding a defined
+ * threshold. Demonstrates basic vector iteration and conditional logic in C++.
+ */
+
+// Represents a transaction using a struct.
+// Provides better type safety and structure than loose dictionaries in Python.
+struct Transaction {
+    int id;
+    std::string account_id;
+    double amount; // Using double for simplicity here; for high-precision financial apps,
+                   // consider dedicated money types or fixed-point arithmetic.
+    std::string timestamp;
+};
+
+/**
+ * @brief Identifies transactions exceeding a specified amount threshold.
+ *
+ * @param transactions A constant reference to a vector of Transaction objects.
+ *                     Using const& avoids copying the vector, improving efficiency.
+ * @param threshold The amount (as a double) above which a transaction's absolute
+ *                  value is flagged.
+ * @return std::vector<Transaction> A vector containing copies of the transactions
+ *         that exceeded the threshold. Returns an empty vector if none are found.
+ */
+std::vector<Transaction> detectLargeTransactions(const std::vector<Transaction>& transactions, double threshold) {
+    // Input validation (basic)
+    if (threshold <= 0) {
+         std::cout << "Warning: Threshold should generally be positive for detecting large transactions." << std::endl;
+         // Could throw an exception or proceed based on requirements
+    }
+
+    std::vector<Transaction> flagged_transactions; // Vector to store results
+
+    // Iterate through the transaction vector using a range-based for loop.
+    for (const auto& tx : transactions) {
+        // Check if the absolute value of the transaction amount exceeds the threshold.
+        if (std::abs(tx.amount) > threshold) {
+            flagged_transactions.push_back(tx); // Add a copy of the suspicious transaction
+        }
+    }
+
+    return flagged_transactions;
+}
+
+// --- Main Execution Area ---
+int main() {
+    // Sample transaction log using std::vector of Transaction structs.
+    std::vector<Transaction> transaction_log = {
+        {1, "ACC001", 50.25, "2024-01-15T10:00:00Z"},
+        {2, "ACC002", 15000.00, "2024-01-15T10:05:00Z"}, // Potential outlier
+        {3, "ACC001", -20.00, "2024-01-15T10:10:00Z"},
+        {4, "ACC003", 100.00, "2024-01-15T10:15:00Z"},
+        {5, "ACC002", -12000.50, "2024-01-15T11:00:00Z"}, // Potential outlier
+        {6, "ACC004", 75.99, "2024-01-15T11:05:00Z"},
+        {7, "ACC001", 250000.00, "2024-01-15T11:30:00Z"}, // Potential outlier (large deposit)
+    };
+
+    // Define the threshold
+    double fraud_threshold = 10000.00;
+
+    std::cout << "--- C++ Bank Fraud Simulator ---" << std::endl;
+    std::cout << "Processing " << transaction_log.size() << " transactions..." << std::endl;
+    // Use iomanip for formatted output if desired, e.g., std::fixed, std::setprecision(2)
+    std::cout << "Flagging transactions with absolute amount > " << fraud_threshold << std::endl;
+
+
+    // --- Basic Timing ---
+    auto start = std::chrono::high_resolution_clock::now();
+
+    // Execute the detection logic
+    std::vector<Transaction> suspicious_transactions = detectLargeTransactions(transaction_log, fraud_threshold);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double, std::milli> duration_ms = end - start;
+    // --- End Timing ---
+
+
+    std::cout << "\n--- Potential Fraudulent Transactions Found (" << suspicious_transactions.size() << ") ---" << std::endl;
+    if (!suspicious_transactions.empty()) {
+        // Use std::fixed and std::setprecision for consistent money output
+        std::cout << std::fixed << std::setprecision(2);
+        for (const auto& tx : suspicious_transactions) {
+            std::cout << "  ID: " << tx.id
+                      << ", Account: " << tx.account_id
+                      << ", Amount: " << tx.amount // Already set precision
+                      << ", Time: " << tx.timestamp << std::endl;
+        }
+    } else {
+        std::cout << "  No transactions exceeded the threshold." << std::endl;
+    }
+
+    std::cout << "\nProcessing completed in " << duration_ms.count() << " ms (C++)." << std::endl;
+
+
+    return 0; // Indicate successful execution
+}
