@@ -1,0 +1,81 @@
+# -*- coding: utf-8 -*-
+"""
+Demonstrates fundamental Python keywords and concepts in a clear, concise manner.
+This script processes a list of numbers to illustrate basic operations.
+"""
+
+# --- Function Definition ---
+
+# 'def' keyword: Defines a function named 'analyze_numbers'.
+# Functions group code to perform a specific task and can be reused.
+def analyze_numbers(data_list):
+    """
+    Analyzes a list of numbers, identifying positive, negative, and zero values.
+
+    Args:
+        data_list (list): A list containing numbers (integers or floats).
+
+    Returns:
+        tuple: A tuple containing counts of (positives, negatives, zeros).
+               Returns (0, 0, 0) if the input is not a list or is empty.
+    """
+    # Basic input validation: Check if the input is actually a list and not empty.
+    # 'if', 'not', 'isinstance', 'or', 'len' keywords/functions demonstrated.
+    if not isinstance(data_list, list) or len(data_list) == 0:
+        print("Input is not a valid non-empty list. Cannot analyze.")
+        # 'return' keyword: Exits the function and sends back a value(s).
+        return 0, 0, 0 # Return default counts for invalid input
+
+    # Initialize counters
+    positive_count = 0
+    negative_count = 0
+    zero_count = 0
+
+    print("\n--- Analyzing List ---")
+    # --- Looping ---
+    # 'for' keyword: Starts a loop that iterates over each item in a sequence (here, data_list).
+    # 'in' keyword: Used with 'for' to specify the sequence to iterate over.
+    for number in data_list:
+        # --- Conditional Logic ---
+        # 'if' keyword: Executes the block below it only if the condition (number > 0) is True.
+        # Comparison operators: '>' (greater than), '<' (less than), '==' (equal to).
+        if number > 0:
+            # 'print()' function: Displays output to the console.
+            print(f"{number} is Positive.")
+            positive_count += 1 # Shorthand for positive_count = positive_count + 1
+        # 'elif' keyword (else if): Checks this condition only if the previous 'if' was False.
+        elif number < 0:
+            print(f"{number} is Negative.")
+            negative_count += 1
+        # 'else' keyword: Executes the block below if none of the preceding 'if' or 'elif' conditions were True.
+        else:
+            print(f"{number} is Zero.")
+            zero_count += 1
+
+    print("--- Analysis Complete ---")
+    # Return the final counts collected during the loop.
+    return positive_count, negative_count, zero_count
+
+# --- Main Execution Area ---
+
+# This block runs when the script is executed directly.
+if __name__ == "__main__":
+
+    # Example data: A list containing various numbers.
+    # 'list' data type: An ordered collection of items, enclosed in [].
+    sample_numbers = [10, -5, 0, 22.5, -0.5, 0, 8, -100]
+    invalid_input = "this is not a list"
+
+    # Calling the function with valid data and storing the returned tuple.
+    positives, negatives, zeros = analyze_numbers(sample_numbers)
+
+    # Displaying the summary results.
+    # 'f-string' (formatted string literal): Allows embedding expressions inside {} within strings.
+    print(f"\nSummary:")
+    print(f"Positive numbers found: {positives}")
+    print(f"Negative numbers found: {negatives}")
+    print(f"Zeros found: {zeros}")
+
+    # Example of calling with invalid data to show the validation check.
+    print("\n--- Testing Invalid Input ---")
+    analyze_numbers(invalid_input) # Function handles the invalid input internally
