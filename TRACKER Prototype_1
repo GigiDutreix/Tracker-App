@@ -1,0 +1,333 @@
+# -*- coding: utf-8 -*-
+"""
+Core transaction processing module for the Bank Transaction Analyzer.
+
+This module provides a class to load bank transaction data from a CSV file,
+perform cleaning, apply basic categorization based on keywords, and generate
+summary statistics. It is designed to serve as the backend logic for analysis
+or a basic web UI.
+
+Note: This implementation assumes a specific CSV structure. Robust error
+handling and adaptability for different bank formats would be needed for
+a production-ready tool.
+"""
+
+import pandas as pd
+import numpy as np  # Used for NaN handling if needed implicitly by pandas
+import re          # Used for more complex cleaning if needed
+
+# --- Configuration ---
+# Define categories and associated keywords for auto-categorization.
+# This is a simplified example; real-world usage might involve more complex rules,
+# user-defined categories, or even ML models.
+# Keywords are case-insensitive.
+CATEGORY_KEYWORDS = {
+    'Income': ['salary', 'deposit', 'paycheck', 'revenue', 'interest earned'],
+    'Groceries': ['supermarket', 'grocery', 'market', 'whole foods', 'safeway', 'kroger'],
+    'Utilities': ['electric', 'gas', 'water', 'utility', 'internet', 'comcast', 'verizon', 'at&t'],
+    'Rent/Mortgage': ['rent', 'mortgage', 'housing payment'],
+    'Transportation': ['gas station', 'uber', 'lyft', 'transit', 'subway', 'parking', 'fuel'],
+    'Dining Out': ['restaurant', 'cafe', 'coffee shop', 'food delivery', 'grubhub', 'doordash'],
+    'Shopping': ['amazon', 'target', 'walmart', 'online store', 'clothing', 'retail'],
+    'Entertainment': ['movie', 'cinema', 'concert', 'streaming', 'netflix', 'spotify'],
+    'Travel': ['airline', 'hotel', 'airbnb', 'travel booking'],
+    'Transfers': ['transfer', 'payment received', 'payment sent', 'zelle', 'venmo'], # Often needs careful handling
+    # Add more categories and keywords as needed
+}
+
+DEFAULT_CATEGORY = 'Uncategorized'
+
+class TransactionAnalyzer:
+    """
+    Analyzes bank transactions loaded from a CSV file.
+
+    Provides methods for data loading, cleaning, categorization, and basic analysis.
+    """
+
+    def __init__(self):
+        """Initializes the TransactionAnalyzer with an empty DataFrame."""
+        self.transactions_df = pd.DataFrame()
+        print("TransactionAnalyzer initialized.")
+
+    def load_transactions(self, csv_filepath: str, **kwargs):
+        """
+        Loads transaction data from a specified CSV file.
+
+        Args:
+            csv_filepath (str): The path to the CSV file containing transaction data.
+            **kwargs: Additional keyword arguments to pass directly to pandas.read_csv
+                      (e.g., separator=',', encoding='utf-8', skiprows=N).
+
+        Raises:
+            FileNotFoundError: If the specified csv_filepath does not exist.
+            Exception: For other pandas read_csv related errors.
+            ValueError: If essential columns ('Date', 'Description', 'Amount') are missing.
+        """
+        print(f"Attempting to load transactions from: {csv_filepath}")
+        try:
+            self.transactions_df = pd.read_csv(csv_filepath, **kwargs)
+            print(f"Successfully loaded {len(self.transactions_df)} transactions.")
+
+            # --- Essential Column Validation ---
+            required_columns = ['Date', 'Description', 'Amount'] # Adjust if bank format differs
+            missing_cols = [col for col in required_columns if col not in self.transactions_df.columns]
+            if missing_cols:
+                raise ValueError(f"CSV file is missing required columns: {', '.join(missing_cols)}. "
+                                 f"Available columns: {', '.join(self.transactions_df.columns)}")
+
+        except FileNotFoundError:
+            print(f"Error: File not found at {csv_filepath}")
+            raise
+        except Exception as e:
+            print(f"Error loading or validating CSV: {e}")
+            # Reset DataFrame if loading failed partway through
+            self.transactions_df = pd.DataFrame()
+            raise
+
+    def clean_data(self):
+        """
+        Performs data cleaning on the loaded transactions.
+
+        - Converts 'Date' column to datetime objects.
+        - Cleans and converts 'Amount' column to numeric, handling currency symbols/commas.
+        - Removes rows with invalid date or amount data after conversion.
+
+        Returns:
+            int: The number of rows dropped due to cleaning issues.
+
+        Raises:
+            RuntimeError: If transactions have not been loaded yet.
+        """
+        if self.transactions_df.empty:
+            raise RuntimeError("No transaction data loaded. Please load data first using load_transactions().")
+
+        print("Starting data cleaning process...")
+        initial_rows = len(self.transactions_df)
+
+        # 1. Clean and Convert 'Date' column
+        # `errors='coerce'` will turn unparseable dates into NaT (Not a Time)
+        self.transactions_df['Date'] = pd.to_datetime(self.transactions_df['Date'], errors='coerce')
+
+        # 2. Clean and Convert 'Amount' column
+        # Remove common currency symbols and commas, then convert to numeric.
+        # Assumes amounts might be strings like "$1,234.56" or "-€50.00".
+        if self.transactions_df['Amount'].dtype == 'object': # Only process if it's not already numeric
+            amount_str = self.transactions_df['Amount'].astype(str)
+            # Use regex to remove typical currency symbols ($ € £ ¥) and commas
+            cleaned_amount = amount_str.str.replace(r'[$,€£¥,]', '', regex=True)
+            # `errors='coerce'` turns non-numeric values into NaN
+            self.transactions_df['Amount'] = pd.to_numeric(cleaned_amount, errors='coerce')
+        elif not pd.api.types.is_numeric_dtype(self.transactions_df['Amount']):
+             # Handle cases where it's not object but also not strictly numeric yet
+             print(f"Warning: 'Amount' column type is {self.transactions_df['Amount'].dtype}. Attempting conversion.")
+             self.transactions_df['Amount'] = pd.to_numeric(self.transactions_df['Amount'], errors='coerce')
+
+
+        # 3. Handle Missing/Invalid Values introduced by coercion
+        # Drop rows where Date or Amount could not be parsed successfully.
+        # This is a simple strategy; more complex imputation could be used if appropriate.
+        rows_before_drop = len(self.transactions_df)
+        self.transactions_df.dropna(subset=['Date', 'Amount'], inplace=True)
+        rows_after_drop = len(self.transactions_df)
+        dropped_count = rows_before_drop - rows_after_drop
+
+        if dropped_count > 0:
+            print(f"Dropped {dropped_count} rows due to invalid Date or Amount formatting.")
+
+        # Optional: Clean 'Description' field (e.g., remove extra whitespace)
+        if 'Description' in self.transactions_df.columns:
+             self.transactions_df['Description'] = self.transactions_df['Description'].astype(str).str.strip()
+
+        final_rows = len(self.transactions_df)
+        print(f"Data cleaning complete. Final transaction count: {final_rows}")
+
+        return initial_rows - final_rows # Return the total number dropped
+
+
+    def _assign_category(self, description: str) -> str:
+        """
+        Helper function to assign a category based on keywords in the description.
+        Case-insensitive matching.
+        """
+        if not isinstance(description, str):
+            return DEFAULT_CATEGORY # Handle potential non-string descriptions
+
+        description_lower = description.lower()
+        for category, keywords in CATEGORY_KEYWORDS.items():
+            for keyword in keywords:
+                # Use regex for word boundary matching (\b) to avoid partial matches
+                # e.g., don't match "rent" in "different"
+                if re.search(r'\b' + re.escape(keyword.lower()) + r'\b', description_lower):
+                    return category
+        return DEFAULT_CATEGORY
+
+
+    def categorize_transactions(self, description_col: str = 'Description'):
+        """
+        Applies categorization rules to transactions based on keywords.
+
+        Adds a 'Category' column to the DataFrame. Uses the `CATEGORY_KEYWORDS`
+        configuration for mapping.
+
+        Args:
+            description_col (str): The name of the column containing the transaction
+                                   description to use for keyword matching. Defaults to 'Description'.
+
+        Raises:
+            RuntimeError: If transactions have not been loaded or cleaned.
+            KeyError: If the specified description_col does not exist in the DataFrame.
+        """
+        if self.transactions_df.empty:
+            raise RuntimeError("No transaction data available. Load and clean data first.")
+        if 'Amount' not in self.transactions_df.columns or not pd.api.types.is_numeric_dtype(self.transactions_df['Amount']):
+             raise RuntimeError("Amount column is missing or not numeric. Ensure clean_data() has run successfully.")
+        if description_col not in self.transactions_df.columns:
+            raise KeyError(f"Description column '{description_col}' not found in the DataFrame.")
+        if self.transactions_df[description_col].isnull().any():
+             print(f"Warning: Found null values in '{description_col}'. These will likely be categorized as '{DEFAULT_CATEGORY}'.")
+             # Optionally fill null descriptions before applying categorization
+             # self.transactions_df[description_col].fillna('', inplace=True)
+
+
+        print(f"Applying categorization based on column: '{description_col}'...")
+        # Use the helper function with .apply() for clear categorization logic
+        self.transactions_df['Category'] = self.transactions_df[description_col].apply(self._assign_category)
+
+        uncategorized_count = (self.transactions_df['Category'] == DEFAULT_CATEGORY).sum()
+        print(f"Categorization complete. {uncategorized_count} transactions remain '{DEFAULT_CATEGORY}'.")
+
+
+    def get_summary_statistics(self) -> dict:
+        """
+        Calculates overall summary statistics for the transactions.
+
+        Returns:
+            dict: A dictionary containing:
+                  - total_income (float)
+                  - total_expenses (float)
+                  - net_balance (float)
+                  - start_date (Timestamp)
+                  - end_date (Timestamp)
+                  - transaction_count (int)
+
+        Raises:
+            RuntimeError: If transactions are not loaded/cleaned or categories not assigned yet
+                          (implicitly checks for 'Amount' and 'Date' columns).
+        """
+        if self.transactions_df.empty or 'Amount' not in self.transactions_df or 'Date' not in self.transactions_df:
+             raise RuntimeError("Data not ready for analysis. Load and clean data first.")
+
+        total_income = self.transactions_df[self.transactions_df['Amount'] > 0]['Amount'].sum()
+        # Expenses are negative values, sum them directly. Use abs() if you want a positive number representation.
+        total_expenses = self.transactions_df[self.transactions_df['Amount'] < 0]['Amount'].sum()
+        net_balance = self.transactions_df['Amount'].sum() # Or total_income + total_expenses
+
+        return {
+            'total_income': round(total_income, 2),
+            'total_expenses': round(total_expenses, 2), # Typically negative
+            'net_balance': round(net_balance, 2),
+            'start_date': self.transactions_df['Date'].min(),
+            'end_date': self.transactions_df['Date'].max(),
+            'transaction_count': len(self.transactions_df)
+        }
+
+    def summarize_by_category(self, include_counts=True) -> pd.DataFrame:
+        """
+        Summarizes total spending/income per category.
+
+        Args:
+            include_counts (bool): If True, includes the transaction count per category.
+
+        Returns:
+            pd.DataFrame: A DataFrame indexed by 'Category' with columns for
+                          'Total Amount' and optionally 'Transaction Count'.
+
+        Raises:
+             RuntimeError: If categorization has not been performed ('Category' column missing).
+        """
+        if 'Category' not in self.transactions_df.columns:
+             raise RuntimeError("Categorization not performed. Run categorize_transactions() first.")
+
+        # Group by category and sum the amounts
+        summary = self.transactions_df.groupby('Category')['Amount'].sum().round(2).reset_index()
+        summary.rename(columns={'Amount': 'Total Amount'}, inplace=True)
+
+        if include_counts:
+             counts = self.transactions_df.groupby('Category').size().reset_index(name='Transaction Count')
+             summary = pd.merge(summary, counts, on='Category')
+
+        summary.set_index('Category', inplace=True)
+        summary.sort_values(by='Total Amount', ascending=True, inplace=True) # Sort for better readability
+
+        return summary
+
+    def get_transactions(self) -> pd.DataFrame:
+        """
+        Returns a copy of the current transactions DataFrame.
+
+        Returns:
+            pd.DataFrame: A copy of the internal DataFrame with all applied cleaning and categorization.
+                          Returning a copy prevents unintended modification of the internal state.
+        """
+        if self.transactions_df.empty:
+            print("Warning: Transaction data is empty.")
+        return self.transactions_df.copy()
+
+
+# --- Example Usage ---
+if __name__ == "__main__":
+    # This block runs only when the script is executed directly
+    # Replace with the actual path to your transaction CSV
+    # ASSUMPTIONS about CSV: Columns named 'Date', 'Description', 'Amount' exist.
+    # 'Amount' may have currency symbols/commas. Negative values are expenses.
+    csv_file = 'sample_transactions.csv' # <<< --- !!! CREATE or REPLACE this file path !!!
+
+    # Create a dummy CSV for demonstration if it doesn't exist
+    try:
+        pd.read_csv(csv_file, nrows=1) # Check if file exists and is readable
+    except (FileNotFoundError, pd.errors.EmptyDataError):
+        print(f"'{csv_file}' not found or empty. Creating a dummy sample file...")
+        dummy_data = {
+            'Date': ['2024-01-05', '2024-01-10', '2024-01-12', '2024-01-15', '2024-01-15', '2024-01-20', '2024-01-22', 'bad-date', '2024-01-25'],
+            'Description': [' Paycheck Deposit', 'KROGER SUPERMARKET #123', 'Shell Gas Station', 'Transfer from Savings', '  Netflix Streaming Bill  ', 'Local Coffee Shop', 'AMAZON RETAIL PURCHASE', 'Invalid Amount Row', 'Utility Bill - Electric Co.'],
+            'Amount': ['$2,500.00', '-£55.30', '-45.00', '500', '-€15.99', '-4.75', '-120.50', 'abc', '-95.60']
+        }
+        dummy_df = pd.DataFrame(dummy_data)
+        dummy_df.to_csv(csv_file, index=False)
+        print(f"Dummy file '{csv_file}' created.")
+
+
+    analyzer = TransactionAnalyzer()
+
+    try:
+        # 1. Load Data
+        analyzer.load_transactions(csv_file) # Add other args like sep=';' if needed
+
+        # 2. Clean Data
+        analyzer.clean_data()
+
+        # 3. Categorize Transactions
+        analyzer.categorize_transactions() # Uses 'Description' column by default
+
+        # 4. Get Overall Summary
+        print("\n--- Overall Summary ---")
+        summary_stats = analyzer.get_summary_statistics()
+        for key, value in summary_stats.items():
+             print(f"{key.replace('_', ' ').title()}: {value}")
+
+        # 5. Get Summary by Category
+        print("\n--- Summary by Category ---")
+        category_summary = analyzer.summarize_by_category(include_counts=True)
+        print(category_summary)
+
+        # 6. (Optional) Get the processed DataFrame
+        # final_df = analyzer.get_transactions()
+        # print("\n--- Processed Transactions ---")
+        # print(final_df.head())
+
+    except (FileNotFoundError, ValueError, KeyError, RuntimeError) as e:
+        print(f"\n--- An error occurred during analysis ---")
+        print(e)
+    except Exception as e:
+         print(f"\n--- An unexpected error occurred ---")
+         print(e)
